@@ -1,0 +1,2617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ULM Virtual Tour</title>
+    <style>
+        /* Fullscreen containers */
+        html, body, #view-container, #pano, #directions-map {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #view-container {
+            position: relative;
+        }
+
+        #pano, #directions-map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Mini map container as a clickable area */
+        #mini-map-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 200px;
+            height: 120px;
+            z-index: 10;
+            border: 2px solid #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+        }
+
+        #mini-map-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        #mini-map-container:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+            border-color: #4CAF50;
+            background: rgba(255, 255, 255, 0.15);
+            animation: pulse 2s infinite;
+        }
+
+        #mini-map-container:active {
+            transform: scale(0.98);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Add a subtle pulse animation */
+        @keyframes pulse {
+            0% { box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(76, 175, 80, 0.7); }
+            70% { box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3), 0 0 0 10px rgba(76, 175, 80, 0); }
+            100% { box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(76, 175, 80, 0); }
+        }
+
+        /* Add a tooltip/label for the mini map */
+        #mini-map-container::after {
+            content: "Hover to see locations • Click for full map with search";
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+                #mini-map-container:hover::after {
+            opacity: 1;
+        }
+
+        /* Directions Panel Styles */
+        .directions-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .panel-header {
+            padding: 15px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .show-directions-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .show-directions-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .directions-form {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .location-select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            transition: border-color 0.3s ease;
+        }
+
+        .location-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .get-directions-btn {
+            flex: 1;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .get-directions-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+        }
+
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        /* Directions Info Box Styles */
+        .directions-info {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            z-index: 999;
+            animation: slideInRight 0.3s ease;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateY(-50%) translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(-50%) translateX(0);
+            }
+        }
+
+        .info-header {
+            padding: 15px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .info-header h4 {
+            margin: 0;
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .close-info-btn {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #666;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .close-info-btn:hover {
+            background: rgba(0, 0, 0, 0.1);
+            color: #333;
+        }
+
+        .route-details {
+            padding: 20px;
+        }
+
+        .route-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .route-stat:last-child {
+            margin-bottom: 0;
+        }
+
+        .route-stat-label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .route-stat-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        /* Building Info Panel Styles */
+        .building-info-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 380px;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            box-shadow: -5px 0 25px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+            transition: right 0.4s ease-in-out;
+            overflow-y: auto;
+        }
+
+        .building-info-panel.show {
+            right: 0;
+        }
+
+        .info-panel-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .info-panel-header h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .info-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+        }
+
+        .info-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .info-panel-content {
+            padding: 0;
+        }
+
+        .building-image-container {
+            position: relative;
+            height: 200px;
+            overflow: hidden;
+        }
+
+        .building-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .building-image:hover {
+            transform: scale(1.05);
+        }
+
+        .building-details {
+            padding: 20px;
+        }
+
+        .detail-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .detail-section:last-of-type {
+            border-bottom: none;
+        }
+
+        .detail-section h4 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-section p {
+            margin: 0;
+            color: #666;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .contact-link {
+            display: inline-block;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 5px;
+            transition: color 0.3s ease;
+        }
+
+        .contact-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .directions-btn {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+
+        .directions-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+        }
+
+        .streetview-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .streetview-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .bookmark-btn {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+        }
+
+        .bookmark-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .bookmark-btn.saved {
+            background: linear-gradient(135deg, #fdcb6e 0%, #e17055 100%);
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .building-info-panel {
+                width: 100%;
+                right: -100%;
+            }
+            
+            .my-places-panel {
+                width: 100%;
+                right: -100%;
+            }
+        }
+
+        /* My Places Button Styles */
+        .my-places-btn {
+            position: fixed;
+            top: 20px;
+            right: 340px; /* Position to the left of directions panel */
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .my-places-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(135deg, #ee5a24 0%, #d63031 100%);
+        }
+
+        .my-places-btn:active {
+            transform: translateY(0);
+        }
+
+        .my-places-count {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* My Places Panel Styles */
+        .my-places-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 380px;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            box-shadow: -5px 0 25px rgba(0, 0, 0, 0.3);
+            z-index: 1002;
+            transition: right 0.4s ease-in-out;
+            overflow-y: auto;
+        }
+
+        .my-places-panel.show {
+            right: 0;
+        }
+
+        .my-places-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .my-places-header h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .my-places-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+        }
+
+        .my-places-close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .my-places-content {
+            padding: 20px;
+        }
+
+        .my-places-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .my-places-empty h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+
+        .my-places-empty p {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .saved-place-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .saved-place-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            border-color: #ff6b6b;
+        }
+
+        .saved-place-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .saved-place-info {
+            flex: 1;
+        }
+
+        .saved-place-name {
+            font-weight: 600;
+            color: #333;
+            margin: 0 0 5px 0;
+            font-size: 16px;
+        }
+
+        .saved-place-description {
+            color: #666;
+            font-size: 12px;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        .saved-place-remove {
+            background: none;
+            border: none;
+            color: #ff6b6b;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            font-size: 16px;
+        }
+
+        .saved-place-remove:hover {
+            background: rgba(255, 107, 107, 0.1);
+            transform: scale(1.1);
+        }
+
+        /* Toast Notification Styles */
+        .toast-notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .toast-notification.show {
+            opacity: 1;
+        }
+
+        .toast-notification.success {
+            background: rgba(40, 167, 69, 0.9);
+        }
+
+        .toast-notification.error {
+            background: rgba(220, 53, 69, 0.9);
+        }
+
+        /* Virtual Tour Button Styles */
+        .virtual-tour-btn {
+            position: fixed;
+            top: 20px;
+            right: 500px; /* Position to the left of My Places button */
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .virtual-tour-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(135deg, #8e44ad 0%, #7d3c98 100%);
+        }
+
+        .virtual-tour-btn:active {
+            transform: translateY(0);
+        }
+
+        .virtual-tour-btn.active {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            animation: pulse-tour 2s infinite;
+        }
+
+        @keyframes pulse-tour {
+            0% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 10px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        /* Virtual Tour Panel Styles */
+        .virtual-tour-panel {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: 380px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 1003;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s ease;
+            overflow: hidden;
+        }
+
+        .virtual-tour-panel.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .tour-header {
+            padding: 25px 25px 20px 25px;
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .tour-header h3 {
+            margin: 0 0 5px 0;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .tour-progress {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .tour-content {
+            padding: 25px;
+        }
+
+        .tour-building-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin: 0 0 15px 0;
+            text-align: center;
+        }
+
+        .tour-building-description {
+            color: #666;
+            line-height: 1.6;
+            margin: 0 0 25px 0;
+            text-align: center;
+            font-size: 15px;
+        }
+
+        .tour-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .tour-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            min-width: 80px;
+        }
+
+        .tour-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .tour-btn:active {
+            transform: translateY(0);
+        }
+
+        .tour-btn.back-btn {
+            background: #6c757d;
+            color: white;
+        }
+
+        .tour-btn.back-btn:hover {
+            background: #5a6268;
+        }
+
+        .tour-btn.prev-btn {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+        }
+
+        .tour-btn.prev-btn:hover {
+            background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
+        }
+
+        .tour-btn.next-btn {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: white;
+        }
+
+        .tour-btn.next-btn:hover {
+            background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+        }
+
+        .tour-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Tour overlay */
+        .tour-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 1002;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s ease;
+        }
+
+        .tour-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* My Location Button Styles */
+        .my-location-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .my-location-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(135deg, #3367d6 0%, #2d8f41 100%);
+        }
+
+        .my-location-btn:active {
+            transform: scale(0.95);
+        }
+
+        .my-location-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Loading animation for the button */
+        .my-location-btn.loading {
+            animation: pulse-location 1.5s infinite;
+        }
+
+        @keyframes pulse-location {
+            0% {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(66, 133, 244, 0.7);
+            }
+            70% {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 10px rgba(66, 133, 244, 0);
+            }
+            100% {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(66, 133, 244, 0);
+            }
+        }
+
+        /* User location marker custom styles */
+        .user-location-marker {
+            width: 20px;
+            height: 20px;
+            background: #4285f4;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+ 
+    </style>
+</head>
+<body>
+
+<!-- Fullscreen Street View and Map Container -->
+<div id="view-container">
+<div id="pano"></div>
+    <div id="directions-map" style="display: none;"></div>
+</div>
+
+<!-- Mini map container that redirects to ULM_MAP.html when clicked -->
+<div id="mini-map-container" onclick="redirectToFullMap()">
+    <iframe id="mini-map-iframe" src="ULMMAP.html" frameborder="0" style="pointer-events: none;"></iframe>
+</div>
+
+<!-- Directions Panel -->
+<div id="directions-panel" class="directions-panel">
+    <div class="panel-header">
+        <h3>Get Walking Directions</h3>
+        <button id="show-directions-btn" class="show-directions-btn" onclick="showDirectionsPanel()">📍 Directions</button>
+    </div>
+    
+    <div id="directions-form" class="directions-form" style="display: none;">
+        <div class="form-group">
+            <label for="from-select">From:</label>
+            <select id="from-select" class="location-select">
+                <option value="">Select starting location...</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="to-select">To:</label>
+            <select id="to-select" class="location-select">
+                <option value="">Select destination...</option>
+            </select>
+        </div>
+        
+        <div class="button-group">
+            <button id="get-directions-btn" class="get-directions-btn" onclick="calculateRoute()">Get Directions</button>
+            <button id="back-btn" class="back-btn" onclick="hideDirectionsPanel()">Back</button>
+        </div>
+    </div>
+</div>
+
+<!-- Directions Info Box -->
+<div id="directions-info" class="directions-info" style="display: none;">
+    <div class="info-header">
+        <h4>Walking Route</h4>
+        <button class="close-info-btn" onclick="clearDirections()" title="Return to Street View">×</button>
+    </div>
+    <div id="route-details" class="route-details">
+        <!-- Route information will be populated here -->
+    </div>
+    <div style="padding: 15px; border-top: 1px solid rgba(0,0,0,0.1);">
+        <button onclick="clearDirections()" style="width: 100%; padding: 10px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Return to Street View</button>
+    </div>
+</div>
+
+<!-- Building Info Panel -->
+<div id="building-info-panel" class="building-info-panel" style="display: none;">
+    <div class="info-panel-header">
+        <h3 id="building-title">Building Name</h3>
+        <button class="info-close-btn" onclick="closeBuildingInfo()" title="Close">&times;</button>
+    </div>
+    
+    <div class="info-panel-content">
+        <div class="building-image-container">
+            <img id="building-image" src="" alt="Building photo" class="building-image">
+        </div>
+        
+        <div class="building-details">
+            <div class="detail-section">
+                <h4>About</h4>
+                <p id="building-description">Building description will appear here.</p>
+            </div>
+            
+            <div class="detail-section">
+                <h4>📍 Location</h4>
+                <p id="building-location">Campus location details</p>
+            </div>
+            
+            <div class="detail-section">
+                <h4>🕒 Hours</h4>
+                <p id="building-hours">Operating hours</p>
+            </div>
+            
+            <div class="detail-section">
+                <h4>📞 Contact</h4>
+                <div id="building-contact">
+                    <a id="building-website" href="#" target="_blank" class="contact-link">Visit Website</a>
+                    <p id="building-phone"></p>
+                </div>
+            </div>
+            
+            <div class="panel-actions">
+                <button onclick="getDirectionsToBuilding()" class="action-btn directions-btn">Get Directions</button>
+                <button onclick="viewInStreetView()" class="action-btn streetview-btn">Street View</button>
+                <button id="bookmark-btn" onclick="toggleBookmark()" class="action-btn bookmark-btn">⭐ Add to My Places</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- My Location Button -->
+<button id="my-location-btn" class="my-location-btn" onclick="getMyLocation()" title="Find my location">
+    📍
+</button>
+
+<!-- Virtual Tour Button -->
+<button id="virtual-tour-btn" class="virtual-tour-btn" onclick="startVirtualTour()" title="Start Guided Virtual Tour">
+    🎬 Start Virtual Tour
+</button>
+
+<!-- My Places Button -->
+<button id="my-places-btn" class="my-places-btn" onclick="showMyPlaces()" title="My Saved Places">
+    ⭐ My Places <span id="my-places-count" class="my-places-count">0</span>
+</button>
+
+<!-- My Places Panel -->
+<div id="my-places-panel" class="my-places-panel">
+    <div class="my-places-header">
+        <h3>⭐ My Saved Places</h3>
+        <button class="my-places-close-btn" onclick="closeMyPlaces()" title="Close">&times;</button>
+    </div>
+    <div id="my-places-content" class="my-places-content">
+        <!-- Saved places will be populated here -->
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast-notification" class="toast-notification"></div>
+
+<!-- Virtual Tour Overlay -->
+<div id="tour-overlay" class="tour-overlay"></div>
+
+<!-- Virtual Tour Panel -->
+<div id="virtual-tour-panel" class="virtual-tour-panel">
+    <div class="tour-header">
+        <h3>🎬 Guided Virtual Tour</h3>
+        <div class="tour-progress">
+            <span id="tour-current-stop">1</span> of <span id="tour-total-stops">6</span> stops
+        </div>
+    </div>
+    <div class="tour-content">
+        <div id="tour-building-name" class="tour-building-name">University Library</div>
+        <div id="tour-building-description" class="tour-building-description">
+            The heart of academic research and learning at ULM. Features study spaces, computer labs, research assistance, and extensive digital and print collections.
+        </div>
+        <div class="tour-controls">
+            <button id="tour-back-btn" class="tour-btn back-btn" onclick="exitVirtualTour()">Back</button>
+            <button id="tour-prev-btn" class="tour-btn prev-btn" onclick="previousTourStop()">Previous</button>
+            <button id="tour-next-btn" class="tour-btn next-btn" onclick="nextTourStop()">Next</button>
+        </div>
+    </div>
+</div>
+
+<!-- Load the Google Maps API -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDSaBDpHzvpKj9RwFcwxjRWHrHOx2fu4Yw&callback=initMap&loading=async" async defer></script>
+<script>
+    // Define the locations with lat-lng pairs, respective URLs, names, and Street View headings
+    const locations = {
+    madisonHall: { 
+        lat: 32.53141486520088, 
+        lng: -92.07575416859294, 
+        url: "https://ulm.edu/reslife/madison_hall.html",
+        name: "Madison Hall",
+        heading: 0 // North (default)
+    },
+    bcm: { 
+        lat: 32.530380227023095, 
+        lng: -92.07551708650689, 
+        url: "bcm.html",
+        name: "BCM Building",
+        heading: 0 // North (default)
+    },
+    library: { 
+        lat: 32.5288023859178, 
+        lng: -92.07296392457317, 
+        url: "library.html",
+        name: "University Library",
+        heading: 180 // South
+    },
+    cnsb: { 
+        lat: 32.52901551702299, 
+        lng: -92.07580366711164, 
+        url: "cnsb.html",
+        name: "CNSB Building",
+        heading: 180 // South
+    },
+    hub: { 
+        lat: 32.5291168437061, 
+        lng: -92.07495999702866, 
+        url: "https://univlamonroe.campusdish.com/en/locationsandmenus/thehub/",
+        name: "The Hub",
+        heading: 180 // South
+    },
+    schulzeDiningHall: { 
+        lat: 32.53002620668472, 
+        lng: -92.07084588104141, 
+        url: "https://univlamonroe.campusdish.com/LocationsAndMenus/Schulze",
+        name: "Schulze Dining Hall",
+        heading: 0 // North (default)
+    },
+    sandelHall: { 
+        lat: 32.52892707754729,  
+        lng: -92.07435791317282, 
+        url: "sandel_hall.html",
+        name: "Sandel Hall",
+        heading: 180 // South
+    },
+    studentSuccessCenter: {  
+        lat: 32.52885326801863, 
+        lng: -92.07351377742107, 
+        url: "https://www.ulm.edu/studentsuccess/",
+        name: "Student Success Center",
+        heading: 180 // South
+    },
+    coliseum: { 
+        lat: 32.53076778179313, 
+        lng: -92.06969845596491, 
+        url: "https://ulmwarhawks.com/facilities/fant-ewing-coliseum/4",
+        name: "Fant-Ewing Coliseum",
+        heading: 0 // North (default)
+    },
+    KittyDeGreeHall: { 
+        lat: 32.527944883051696, 
+        lng: -92.07597158109515, 
+        url: "KittyDeGreeHall",
+        name: "Kitty DeGree Hall",
+        heading: 270 // West
+    },
+    GeorgeTWalkerHall: {    
+        lat: 32.52775292821553, 
+        lng: -92.07466248275753, 
+        url: "walker_hall.html",
+        name: "George T. Walker Hall",
+        heading: 90 // East
+    },
+    SugarHall: { 
+        lat: 32.52753217964691, 
+        lng: -92.07518232760465, 
+        url: "SugarHall",
+        name: "Sugar Hall",
+        heading: 180 // South
+    },
+    UniversityCommons: { 
+        lat: 32.529595532192, 
+        lng: -92.07518836900879, 
+        url: "https://www.ulm.edu/reslife/university_commons_.html",
+        name: "University Commons",
+        heading: 0 // North (default)
+    },
+    UniversitySuites: { 
+        lat: 32.52930607156967, 
+        lng: -92.07354685709178, 
+        url: "https://ulm.edu/reslife/university_suites.html",
+        name: "University Suites",
+        heading: 0 // North (default)
+    },
+    HemphillHall: { 
+        lat: 32.52930349469612, 
+        lng: -92.07716208456432, 
+        url: "HemphillHall",
+        name: "Hemphill Hall",
+        heading: 0 // North (default)
+    },
+    CoenenHall: {  
+        lat: 32.530778636837745, 
+        lng: -92.07400968233551, 
+        url: "CoenenHall",
+        name: "Coenen Hall",
+        heading: 0 // North (default)
+    },
+    StraussHall: {  
+        lat: 32.527736113648714, 
+        lng: -92.07238635237854, 
+        url: "StraussHall",
+        name: "Strauss Hall",
+        heading: 0 // North (default)
+    },
+    footbridge: {
+        lat: 32.53137659832743,  
+        lng: -92.07361767005064,
+        url: "foot_bridge.html",
+        name: "Footbridge",
+        heading: 0 // North (default)
+    }
+};
+
+    // Building Information Database
+    const buildingInfo = {
+        library: {
+            name: "University Library",
+            image: "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400&h=200&fit=crop",
+            description: "The heart of academic research and learning at ULM. Features study spaces, computer labs, research assistance, and extensive digital and print collections.",
+            location: "Central Campus",
+            hours: "Mon-Thu: 7:30am-11pm<br>Fri: 7:30am-6pm<br>Sat: 10am-6pm<br>Sun: 2pm-11pm",
+            website: "https://www.ulm.edu/library/",
+            phone: "(318) 342-1050"
+        },
+        madisonHall: {
+            name: "Madison Hall",
+            image: "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=200&fit=crop",
+            description: "Student residential hall providing comfortable living accommodations with modern amenities, study lounges, and community spaces for undergraduate students.",
+            location: "North Campus",
+            hours: "24/7 Access for Residents<br>Office: Mon-Fri 8am-5pm",
+            website: "https://ulm.edu/reslife/madison_hall.html",
+            phone: "(318) 342-5250"
+        },
+        sandelHall: {
+            name: "Sandel Hall",
+            image: "https://images.unsplash.com/photo-1607237138185-eedd9c632b0b?w=400&h=200&fit=crop",
+            description: "Academic building housing multiple departments including classrooms, faculty offices, and specialized learning spaces for various undergraduate programs.",
+            location: "Central Campus",
+            hours: "Mon-Fri: 7am-10pm<br>Sat: 8am-5pm<br>Sun: Closed",
+            website: "https://www.ulm.edu/academics/",
+            phone: "(318) 342-1000"
+        },
+        GeorgeTWalkerHall: {
+            name: "George T. Walker Hall",
+            image: "https://images.unsplash.com/photo-1562774053-701939374585?w=400&h=200&fit=crop",
+            description: "Historic academic building named after a distinguished ULM alumni. Houses administrative offices, classrooms, and serves as a central hub for campus activities.",
+            location: "South Campus",
+            hours: "Mon-Fri: 7am-9pm<br>Sat: 8am-3pm<br>Sun: Closed",
+            website: "walker_hall.html",
+            phone: "(318) 342-1100"
+        },
+        footbridge: {
+            name: "Footbridge",
+            image: "https://images.unsplash.com/photo-1545558014-8692077e9b5c?w=400&h=200&fit=crop",
+            description: "Scenic pedestrian bridge connecting different areas of campus. Popular spot for photos and provides beautiful views of the Ouachita River.",
+            location: "Campus Connector",
+            hours: "24/7 Access",
+            website: "foot_bridge.html",
+            phone: "N/A"
+        },
+        hub: {
+            name: "The Hub",
+            image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400&h=200&fit=crop",
+            description: "Student dining and social center featuring multiple food options, seating areas, and gathering spaces for campus community events and activities.",
+            location: "Central Campus",
+            hours: "Mon-Fri: 7am-10pm<br>Sat-Sun: 10am-8pm",
+            website: "https://univlamonroe.campusdish.com/en/locationsandmenus/thehub/",
+            phone: "(318) 342-5555"
+        },
+        schulzeDiningHall: {
+            name: "Schulze Dining Hall",
+            image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=200&fit=crop",
+            description: "Main dining facility offering diverse meal options, all-you-can-eat dining plans, and special dietary accommodations for students, faculty, and staff.",
+            location: "East Campus",
+            hours: "Mon-Fri: 7am-8pm<br>Sat-Sun: 10am-8pm",
+            website: "https://univlamonroe.campusdish.com/LocationsAndMenus/Schulze",
+            phone: "(318) 342-5560"
+        },
+        coliseum: {
+            name: "Fant-Ewing Coliseum",
+            image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=200&fit=crop",
+            description: "Premier athletic facility and event venue hosting ULM Warhawks basketball games, graduation ceremonies, concerts, and major campus events.",
+            location: "Athletic Complex",
+            hours: "Event Dependent<br>Box Office: Mon-Fri 8am-5pm",
+            website: "https://ulmwarhawks.com/facilities/fant-ewing-coliseum/4",
+            phone: "(318) 342-5460"
+        },
+        studentSuccessCenter: {
+            name: "Student Success Center",
+            image: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400&h=200&fit=crop",
+            description: "Comprehensive support center offering academic advising, tutoring services, career counseling, and resources to help students achieve their educational goals.",
+            location: "Central Campus",
+            hours: "Mon-Fri: 8am-6pm<br>Sat: 9am-1pm<br>Sun: Closed",
+            website: "https://www.ulm.edu/studentsuccess/",
+            phone: "(318) 342-5270"
+        },
+        cnsb: {
+            name: "CNSB Building",
+            image: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400&h=200&fit=crop",
+            description: "Chemistry and Natural Science Building featuring state-of-the-art laboratories, research facilities, and classrooms for STEM education and research.",
+            location: "Science Complex",
+            hours: "Mon-Fri: 7am-10pm<br>Sat: 8am-5pm<br>Sun: Closed",
+            website: "https://www.ulm.edu/cnsb/",
+            phone: "(318) 342-1390"
+        },
+        bcm: {
+            name: "BCM Building",
+            image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=200&fit=crop",
+            description: "Baptist Collegiate Ministry building providing spiritual support, community programs, and meeting spaces for students of all faiths.",
+            location: "Campus Ministry Area",
+            hours: "Mon-Fri: 9am-5pm<br>Evening programs vary",
+            website: "bcm.html",
+            phone: "(318) 342-6789"
+        },
+        UniversityCommons: {
+            name: "University Commons",
+            image: "https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=400&h=200&fit=crop",
+            description: "Modern residential complex offering apartment-style living with full kitchens, private bedrooms, and community amenities for upperclassmen.",
+            location: "Residential Area",
+            hours: "24/7 Access for Residents<br>Office: Mon-Fri 8am-5pm",
+            website: "https://www.ulm.edu/reslife/university_commons_.html",
+            phone: "(318) 342-5251"
+        },
+        UniversitySuites: {
+            name: "University Suites",
+            image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=200&fit=crop",
+            description: "Premium residential housing featuring suite-style accommodations with shared living areas, modern amenities, and enhanced community spaces.",
+            location: "Residential Area",
+            hours: "24/7 Access for Residents<br>Office: Mon-Fri 8am-5pm",
+            website: "https://ulm.edu/reslife/university_suites.html",
+            phone: "(318) 342-5252"
+        },
+        KittyDeGreeHall: {
+            name: "Kitty DeGree Hall",
+            image: "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?w=400&h=200&fit=crop",
+            description: "Nursing and health sciences building equipped with simulation labs, clinical training facilities, and specialized classrooms for healthcare education.",
+            location: "Health Sciences Campus",
+            hours: "Mon-Fri: 7am-9pm<br>Sat: 8am-3pm<br>Sun: Closed",
+            website: "KittyDeGreeHall",
+            phone: "(318) 342-1600"
+        },
+        SugarHall: {
+            name: "Sugar Hall",
+            image: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=400&h=200&fit=crop",
+            description: "Multi-purpose academic building housing various departments with modern classrooms, computer labs, and faculty research spaces.",
+            location: "Academic Quad",
+            hours: "Mon-Fri: 7am-9pm<br>Sat: 8am-3pm<br>Sun: Closed",
+            website: "SugarHall",
+            phone: "(318) 342-1200"
+        },
+        HemphillHall: {
+            name: "Hemphill Hall",
+            image: "https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?w=400&h=200&fit=crop",
+            description: "Academic building featuring lecture halls, seminar rooms, and department offices supporting various undergraduate and graduate programs.",
+            location: "West Campus",
+            hours: "Mon-Fri: 7am-9pm<br>Sat: 8am-3pm<br>Sun: Closed",
+            website: "HemphillHall",
+            phone: "(318) 342-1300"
+        },
+        CoenenHall: {
+            name: "Coenen Hall",
+            image: "https://images.unsplash.com/photo-1562774053-701939374585?w=400&h=200&fit=crop",
+            description: "Administrative and academic building housing student services, registrar offices, and support departments for student success.",
+            location: "Administrative Complex",
+            hours: "Mon-Fri: 8am-5pm<br>Weekends: Closed",
+            website: "CoenenHall",
+            phone: "(318) 342-1400"
+        },
+        StraussHall: {
+            name: "Strauss Hall",
+            image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=200&fit=crop",
+            description: "Historic campus building serving various academic functions and housing specialized programs with traditional collegiate architecture.",
+            location: "Historic Campus",
+            hours: "Mon-Fri: 7am-8pm<br>Sat: 8am-3pm<br>Sun: Closed",
+            website: "StraussHall",
+            phone: "(318) 342-1500"
+    }
+};
+
+    let panorama;
+    let map;
+    let directionsService;
+    let directionsRenderer;
+    let isShowingDirections = false;
+    let currentSelectedBuilding = null;
+    let userLocationMarker = null; // For satellite map
+    let streetViewUserMarker = null; // For Street View
+    let myPlaces = []; // Array to store saved places
+    
+    // Virtual Tour Variables
+    let isVirtualTourActive = false;
+    let currentTourStop = 0;
+    const virtualTourStops = [
+        {
+            key: 'library',
+            name: 'University Library',
+            description: 'The heart of academic research and learning at ULM. Features study spaces, computer labs, research assistance, and extensive digital and print collections.',
+            heading: 180 // South
+        },
+        {
+            key: 'studentSuccessCenter',
+            name: 'Student Success Center',
+            description: 'Comprehensive support center offering academic advising, tutoring services, career counseling, and resources to help students achieve their educational goals.',
+            heading: 180 // South
+        },
+        {
+            key: 'sandelHall',
+            name: 'Sandel Hall',
+            description: 'Academic building housing multiple departments including classrooms, faculty offices, and specialized learning spaces for various undergraduate programs.',
+            heading: 180 // South
+        },
+        {
+            key: 'hub',
+            name: 'The Hub',
+            description: 'Student dining and social center featuring multiple food options, seating areas, and gathering spaces for campus community events and activities.',
+            heading: 180 // South
+        },
+        {
+            key: 'bcm',
+            name: 'BCM Building',
+            description: 'Baptist Collegiate Ministry building providing spiritual support, community programs, and meeting spaces for students of all faiths.',
+            heading: 180 // South
+        },
+        {
+            key: 'madisonHall',
+            name: 'Madison Hall',
+            description: 'Student residential hall providing comfortable living accommodations with modern amenities, study lounges, and community spaces for undergraduate students.',
+            heading: 180 // South
+        }
+    ];
+
+    function initMap() {
+        // Check for a saved location in sessionStorage
+        const selectedLocation = sessionStorage.getItem("selectedLocation");
+        
+        // Use the saved location or default to the library if no selection is saved
+        const initialLocation = selectedLocation && locations[selectedLocation] 
+            ? locations[selectedLocation] 
+            : locations.library;
+
+        // Initialize the full-screen Street View with the selected or default location
+        // Use the building's specific heading or default to 0 (North)
+        const initialHeading = initialLocation.heading || 0;
+        
+        panorama = new google.maps.StreetViewPanorama(document.getElementById("pano"), {
+            position: initialLocation,
+            pov: { heading: initialHeading, pitch: 0 },
+            zoom: 1,
+        });
+
+        // Initialize satellite map for directions (initially hidden)
+        map = new google.maps.Map(document.getElementById("directions-map"), {
+            zoom: 17,
+            center: initialLocation,
+            mapTypeId: google.maps.MapTypeId.SATELLITE,
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false
+        });
+
+        // Initialize directions service and renderer
+        directionsService = new google.maps.DirectionsService();
+        directionsRenderer = new google.maps.DirectionsRenderer({
+            suppressMarkers: false, // Keep default markers for route start/end
+            polylineOptions: {
+                strokeColor: '#FF6B6B',
+                strokeWeight: 5,
+                strokeOpacity: 0.9
+            }
+        });
+
+        // Add markers to both Street View and regular map
+        Object.keys(locations).forEach(key => {
+            const location = locations[key];
+            
+            // Street View marker
+            const streetViewMarker = new google.maps.Marker({
+                position: location,
+                map: panorama,
+                title: location.name,
+                icon: { url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png" }
+            });
+
+            // Regular map marker
+            const mapMarker = new google.maps.Marker({
+                position: location,
+                map: map,
+                title: location.name,
+                icon: { url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png" }
+            });
+
+            // Add click events to both markers to show building info
+            [streetViewMarker, mapMarker].forEach(marker => {
+            marker.addListener("click", () => {
+                    showBuildingInfo(key);
+                });
+            });
+        });
+
+        // Go to the selected location if it exists, then clear sessionStorage
+        if (selectedLocation && locations[selectedLocation]) {
+            goToLocation(selectedLocation);
+            sessionStorage.removeItem("selectedLocation");
+        }
+
+        // Populate the directions dropdowns
+        populateDirectionsDropdowns();
+        
+        // Initialize dropdown event listeners
+        initializeDropdownListeners();
+        
+        // Add click listener to close info panel when clicking outside
+        document.addEventListener('click', function(event) {
+            const panel = document.getElementById('building-info-panel');
+            const directionsPanel = document.getElementById('directions-panel');
+            const myPlacesPanel = document.getElementById('my-places-panel');
+            const virtualTourPanel = document.getElementById('virtual-tour-panel');
+            const virtualTourBtn = document.getElementById('virtual-tour-btn');
+            
+            // Don't close if clicking on the panel itself, directions panel, my places panel, virtual tour panel, virtual tour button, or any markers
+            if (panel.contains(event.target) || 
+                directionsPanel.contains(event.target) ||
+                myPlacesPanel.contains(event.target) ||
+                virtualTourPanel.contains(event.target) ||
+                virtualTourBtn.contains(event.target) ||
+                event.target.closest('.gm-style') || // Google Maps elements
+                event.target.closest('#mini-map-container')) {
+                return;
+            }
+            
+            // Close the panel if it's open
+            if (panel.classList.contains('show')) {
+                closeBuildingInfo();
+            }
+            
+            // Close my places panel if it's open
+            if (myPlacesPanel.classList.contains('show')) {
+                closeMyPlaces();
+            }
+            
+            // Close virtual tour panel if it's open (but not if tour is active)
+            if (virtualTourPanel.classList.contains('show') && !isVirtualTourActive) {
+                exitVirtualTour();
+            }
+        });
+        
+        // Load saved places from localStorage
+        loadMyPlaces();
+        
+        // Update the count display
+        updateMyPlacesCount();
+    }
+
+    // Redirect to ULM_MAP.html when mini-map is clicked
+    function redirectToFullMap() {
+        window.location.href = "ULMMAP.html";
+    }
+
+    // Function to go to a specific location in Street View
+    function goToLocation(locationKey) {
+        const location = locations[locationKey];
+        if (location) {
+            // Get the building's specific heading or default to 0 (North)
+            const heading = location.heading || 0;
+            
+            panorama.setPosition(location);
+            panorama.setPov({ heading: heading, pitch: 0 });
+            
+            console.log(`Navigated to ${location.name} with heading: ${heading}°`);
+        } else {
+            console.error("Location not found:", locationKey);
+        }
+    }
+
+    // DIRECTIONS FEATURE FUNCTIONS
+    
+    /**
+     * Populate the From and To dropdowns with building locations
+     */
+    function populateDirectionsDropdowns() {
+        const fromSelect = document.getElementById('from-select');
+        const toSelect = document.getElementById('to-select');
+        
+        // Clear existing options (keep the first placeholder option)
+        fromSelect.innerHTML = '<option value="">Select starting location...</option>';
+        toSelect.innerHTML = '<option value="">Select destination...</option>';
+        
+        // Add "My Location" option to the "From" dropdown only
+        const myLocationOption = document.createElement('option');
+        myLocationOption.value = 'my-location';
+        myLocationOption.textContent = '📍 My Location';
+        fromSelect.appendChild(myLocationOption);
+        
+        // Add all locations to both dropdowns
+        Object.keys(locations).forEach(key => {
+            const location = locations[key];
+            
+            // Create option for "From" dropdown
+            const fromOption = document.createElement('option');
+            fromOption.value = key;
+            fromOption.textContent = location.name;
+            fromSelect.appendChild(fromOption);
+            
+            // Create option for "To" dropdown
+            const toOption = document.createElement('option');
+            toOption.value = key;
+            toOption.textContent = location.name;
+            toSelect.appendChild(toOption);
+        });
+    }
+
+    /**
+     * Initialize dropdown event listeners (call only once)
+     */
+    function initializeDropdownListeners() {
+        const fromSelect = document.getElementById('from-select');
+        const toSelect = document.getElementById('to-select');
+        
+        // Add event listeners to show building info when selected
+        fromSelect.addEventListener('change', function() {
+            if (this.value && this.value !== 'my-location') {
+                showBuildingInfo(this.value);
+            } else if (this.value === 'my-location') {
+                // Handle "My Location" selection
+                handleMyLocationSelection();
+            }
+        });
+        
+        toSelect.addEventListener('change', function() {
+            if (this.value) {
+                showBuildingInfo(this.value);
+            }
+        });
+    }
+
+    /**
+     * Show the directions panel
+     */
+    function showDirectionsPanel() {
+        const directionsForm = document.getElementById('directions-form');
+        const showBtn = document.getElementById('show-directions-btn');
+        
+        // Close building info panel if it's open to avoid overlap
+        const buildingPanel = document.getElementById('building-info-panel');
+        if (buildingPanel.classList.contains('show')) {
+            closeBuildingInfo();
+        }
+        
+        directionsForm.style.display = 'block';
+        showBtn.style.display = 'none';
+    }
+
+    /**
+     * Hide the directions panel and clear any existing routes
+     */
+    function hideDirectionsPanel() {
+        const directionsForm = document.getElementById('directions-form');
+        const showBtn = document.getElementById('show-directions-btn');
+        const directionsInfo = document.getElementById('directions-info');
+        
+        directionsForm.style.display = 'none';
+        showBtn.style.display = 'block';
+        directionsInfo.style.display = 'none';
+        
+        // Clear the route and switch back to Street View
+        clearDirectionsAndSwitchView();
+        
+        // Reset form
+        document.getElementById('from-select').value = '';
+        document.getElementById('to-select').value = '';
+    }
+
+    /**
+     * Calculate and display the walking route between two locations
+     */
+    function calculateRoute() {
+        const fromKey = document.getElementById('from-select').value;
+        const toKey = document.getElementById('to-select').value;
+        
+        // Validate selections
+        if (!fromKey || !toKey) {
+            alert('Please select both starting location and destination.');
+            return;
+        }
+        
+        if (fromKey === toKey) {
+            alert('Please select different locations for start and destination.');
+            return;
+        }
+        
+        // Handle "My Location" as origin
+        if (fromKey === 'my-location') {
+            calculateRouteFromMyLocation(toKey);
+            return;
+        }
+        
+        const fromLocation = locations[fromKey];
+        const toLocation = locations[toKey];
+        
+        // Create the directions request
+        const request = {
+            origin: new google.maps.LatLng(fromLocation.lat, fromLocation.lng),
+            destination: new google.maps.LatLng(toLocation.lat, toLocation.lng),
+            travelMode: google.maps.TravelMode.WALKING,
+            unitSystem: google.maps.UnitSystem.IMPERIAL,
+            avoidHighways: false,
+            avoidTolls: false
+        };
+        
+        // Calculate the route
+        directionsService.route(request, function(result, status) {
+            if (status === 'OK') {
+                // Switch to map view to show directions
+                switchToMapView();
+                
+                // Set the directions renderer to use the map
+                directionsRenderer.setMap(map);
+                directionsRenderer.setDirections(result);
+                
+                // Center map on the route
+                const bounds = result.routes[0].bounds;
+                map.fitBounds(bounds);
+                
+                // Show route information
+                displayRouteInfo(result, fromLocation.name, toLocation.name);
+                
+                // Hide the directions form and show info
+                document.getElementById('directions-form').style.display = 'none';
+                document.getElementById('directions-info').style.display = 'block';
+                
+                isShowingDirections = true;
+                
+            } else {
+                console.error('Directions request failed due to ' + status);
+                alert('Sorry, we couldn\'t calculate directions between these locations. Please try different locations.');
+            }
+        });
+    }
+
+    /**
+     * Calculate route from user's current location to a destination
+     * @param {string} destinationKey - The key of the destination building
+     */
+    function calculateRouteFromMyLocation(destinationKey) {
+        const destination = locations[destinationKey];
+        
+        if (!destination) {
+            alert('Invalid destination selected.');
+            return;
+        }
+        
+        // Check if we have user location
+        if (!userLocationMarker && !streetViewUserMarker) {
+            alert('Please click the "📍 My Location" button first to get your current position.');
+            return;
+        }
+        
+        // Get user location from existing marker
+        let userLocation;
+        if (userLocationMarker) {
+            userLocation = userLocationMarker.getPosition();
+        } else if (streetViewUserMarker) {
+            userLocation = streetViewUserMarker.getPosition();
+        }
+        
+        if (!userLocation) {
+            alert('Unable to determine your location. Please try clicking the location button again.');
+            return;
+        }
+        
+        // Create the directions request
+        const request = {
+            origin: userLocation,
+            destination: new google.maps.LatLng(destination.lat, destination.lng),
+            travelMode: google.maps.TravelMode.WALKING,
+            unitSystem: google.maps.UnitSystem.IMPERIAL,
+            avoidHighways: false,
+            avoidTolls: false
+        };
+        
+        // Calculate the route
+        directionsService.route(request, function(result, status) {
+            if (status === 'OK') {
+                // Switch to map view to show directions
+                switchToMapView();
+                
+                // Set the directions renderer to use the map
+                directionsRenderer.setMap(map);
+                directionsRenderer.setDirections(result);
+                
+                // Center map on the route
+                const bounds = result.routes[0].bounds;
+                map.fitBounds(bounds);
+                
+                // Show route information
+                displayRouteInfo(result, '📍 My Location', destination.name);
+                
+                // Hide the directions form and show info
+                document.getElementById('directions-form').style.display = 'none';
+                document.getElementById('directions-info').style.display = 'block';
+                
+                isShowingDirections = true;
+                
+            } else {
+                console.error('Directions request failed due to ' + status);
+                alert('Sorry, we couldn\'t calculate directions from your location. Please try again.');
+            }
+        });
+    }
+
+    /**
+     * Handle "My Location" selection from dropdown
+     */
+    function handleMyLocationSelection() {
+        // Check if user location is already available
+        if (!userLocationMarker && !streetViewUserMarker) {
+            // Show a helpful message and automatically trigger location detection
+            if (confirm('To use "My Location" for directions, we need to get your current position. Click OK to continue.')) {
+                getMyLocation();
+            } else {
+                // Reset the dropdown selection
+                document.getElementById('from-select').value = '';
+            }
+        } else {
+            // User location is already available, show a confirmation
+            alert('✅ Your location is ready! Now select a destination and click "Get Directions".');
+        }
+    }
+
+    /**
+     * Display route information in the info box
+     */
+    function displayRouteInfo(directionsResult, fromName, toName) {
+        const routeDetails = document.getElementById('route-details');
+        const route = directionsResult.routes[0];
+        const leg = route.legs[0];
+        
+        // Calculate walking time (Google's default is a bit slow for campus walking)
+        const walkingSpeedMph = 3; // Average walking speed
+        const distanceInMiles = leg.distance.value * 0.000621371; // Convert meters to miles
+        const estimatedMinutes = Math.ceil((distanceInMiles / walkingSpeedMph) * 60);
+        
+        routeDetails.innerHTML = `
+            <div class="route-stat" style="background: rgba(255, 107, 107, 0.1); margin-bottom: 15px;">
+                <span style="color: #FF6B6B; font-weight: 600;">📍 Route displayed on satellite map</span>
+            </div>
+            <div class="route-stat">
+                <span class="route-stat-label">From:</span>
+                <span class="route-stat-value">${fromName}</span>
+            </div>
+            <div class="route-stat">
+                <span class="route-stat-label">To:</span>
+                <span class="route-stat-value">${toName}</span>
+            </div>
+            <div class="route-stat">
+                <span class="route-stat-label">Distance:</span>
+                <span class="route-stat-value">${leg.distance.text}</span>
+            </div>
+            <div class="route-stat">
+                <span class="route-stat-label">Walking Time:</span>
+                <span class="route-stat-value">~${estimatedMinutes} minutes</span>
+            </div>
+        `;
+    }
+
+    /**
+     * Clear directions and return to normal Street View
+     */
+    function clearDirections() {
+        const directionsInfo = document.getElementById('directions-info');
+        const showBtn = document.getElementById('show-directions-btn');
+        
+        // Hide info box
+        directionsInfo.style.display = 'none';
+        
+        // Show the directions button again
+        showBtn.style.display = 'block';
+        
+        // Clear the route and switch back to Street View
+        clearDirectionsAndSwitchView();
+        
+        // Reset form
+        document.getElementById('from-select').value = '';
+        document.getElementById('to-select').value = '';
+    }
+
+    /**
+     * Switch from Street View to satellite map view
+     */
+    function switchToMapView() {
+        if (!isShowingDirections) {
+            // Hide Street View
+            document.getElementById('pano').style.display = 'none';
+            
+            // Show satellite map
+            document.getElementById('directions-map').style.display = 'block';
+            
+            // Trigger resize to ensure map renders properly
+            google.maps.event.trigger(map, 'resize');
+        }
+    }
+
+    /**
+     * Switch from satellite map back to Street View
+     */
+    function switchToStreetView() {
+        if (isShowingDirections) {
+            // Hide satellite map
+            document.getElementById('directions-map').style.display = 'none';
+            
+            // Show Street View
+            document.getElementById('pano').style.display = 'block';
+            
+            isShowingDirections = false;
+        }
+    }
+
+    /**
+     * Clear directions from map and switch back to Street View
+     */
+    function clearDirectionsAndSwitchView() {
+        // Clear the route from the map
+        if (directionsRenderer) {
+            directionsRenderer.setMap(null);
+        }
+        
+        // Switch back to Street View
+        switchToStreetView();
+    }
+
+    // BUILDING INFO PANEL FUNCTIONS
+    
+    /**
+     * Display building information panel with details
+     * @param {string} buildingKey - The key identifier for the building
+     */
+    function showBuildingInfo(buildingKey) {
+        const building = buildingInfo[buildingKey];
+        const location = locations[buildingKey];
+        
+        if (!building) {
+            console.error('Building info not found for:', buildingKey);
+            return;
+        }
+        
+        // Store current selection for action buttons
+        currentSelectedBuilding = buildingKey;
+        
+        // Populate panel content
+        document.getElementById('building-title').textContent = building.name;
+        document.getElementById('building-image').src = building.image;
+        document.getElementById('building-image').alt = building.name + ' photo';
+        document.getElementById('building-description').textContent = building.description;
+        document.getElementById('building-location').textContent = building.location;
+        document.getElementById('building-hours').innerHTML = building.hours;
+        document.getElementById('building-website').href = building.website;
+        document.getElementById('building-website').textContent = 'Visit Website';
+        document.getElementById('building-phone').textContent = building.phone;
+        
+        // Show the panel with slide-in animation
+        const panel = document.getElementById('building-info-panel');
+        panel.style.display = 'block';
+        setTimeout(() => {
+            panel.classList.add('show');
+        }, 10);
+        
+        // Update bookmark button state
+        updateBookmarkButton();
+    }
+
+    /**
+     * Close the building information panel
+     */
+    function closeBuildingInfo() {
+        const panel = document.getElementById('building-info-panel');
+        panel.classList.remove('show');
+        
+        // Hide panel after animation completes
+        setTimeout(() => {
+            panel.style.display = 'none';
+            currentSelectedBuilding = null;
+        }, 400);
+    }
+
+    /**
+     * Get directions to the currently selected building
+     */
+    function getDirectionsToBuilding() {
+        if (!currentSelectedBuilding) return;
+        
+        // Close the info panel
+        closeBuildingInfo();
+        
+        // Open directions panel and pre-select the destination
+        showDirectionsPanel();
+        
+        // Set the "To" dropdown to the selected building
+        setTimeout(() => {
+            document.getElementById('to-select').value = currentSelectedBuilding;
+        }, 100);
+    }
+
+    /**
+     * View the currently selected building in Street View
+     */
+    function viewInStreetView() {
+        if (!currentSelectedBuilding) return;
+        
+        // Close the info panel
+        closeBuildingInfo();
+        
+        // If we're showing directions, switch back to Street View first
+        if (isShowingDirections) {
+            clearDirectionsAndSwitchView();
+        }
+        
+        // Navigate to the building location in Street View
+        goToLocation(currentSelectedBuilding);
+    }
+
+    // MY LOCATION FEATURE FUNCTIONS
+    
+    /**
+     * Get user's current location using HTML5 Geolocation API
+     * Centers the map on their location and adds a marker
+     */
+    function getMyLocation() {
+        const locationBtn = document.getElementById('my-location-btn');
+        
+        // Check if geolocation is supported
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by this browser. Please update your browser or enable location services.');
+            return;
+        }
+        
+        // Add loading state to button
+        locationBtn.classList.add('loading');
+        locationBtn.disabled = true;
+        
+        // Get current position
+        navigator.geolocation.getCurrentPosition(
+            // Success callback
+            function(position) {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                const userLocation = { lat: userLat, lng: userLng };
+                
+                // Remove loading state
+                locationBtn.classList.remove('loading');
+                locationBtn.disabled = false;
+                
+                // Update location based on current view
+                updateUserLocationOnMap(userLocation);
+                
+                console.log('User location found:', userLocation);
+            },
+            // Error callback
+            function(error) {
+                // Remove loading state
+                locationBtn.classList.remove('loading');
+                locationBtn.disabled = false;
+                
+                // Handle different error types
+                let errorMessage = 'Unable to retrieve your location. ';
+                
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage += 'Please enable location permissions for this website in your browser settings.';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage += 'Location information is unavailable. Please try again.';
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage += 'Location request timed out. Please try again.';
+                        break;
+                    default:
+                        errorMessage += 'An unknown error occurred.';
+                        break;
+                }
+                
+                alert(errorMessage);
+                console.error('Geolocation error:', error);
+            },
+            // Options
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 60000
+            }
+        );
+    }
+
+    /**
+     * Update user location marker and center map/street view
+     * @param {Object} userLocation - Object with lat and lng properties
+     */
+    function updateUserLocationOnMap(userLocation) {
+        // Create custom marker icon for user location
+        const userIcon = {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: '#4285f4',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3,
+            strokeOpacity: 1
+        };
+        
+        if (isShowingDirections) {
+            // Update satellite map view
+            updateUserLocationOnSatelliteMap(userLocation, userIcon);
+        } else {
+            // Update Street View
+            updateUserLocationOnStreetView(userLocation, userIcon);
+        }
+    }
+
+    /**
+     * Update user location on satellite map (directions view)
+     * @param {Object} userLocation - Object with lat and lng properties
+     * @param {Object} userIcon - Google Maps icon object
+     */
+    function updateUserLocationOnSatelliteMap(userLocation, userIcon) {
+        // Remove existing user location marker
+        if (userLocationMarker) {
+            userLocationMarker.setMap(null);
+        }
+        
+        // Create new marker for user location
+        userLocationMarker = new google.maps.Marker({
+            position: userLocation,
+            map: map,
+            icon: userIcon,
+            title: 'Your Location',
+            zIndex: 1000
+        });
+        
+        // Center map on user location with animation
+        map.panTo(userLocation);
+        
+        // Animate zoom to level 18 for clarity
+        smoothZoomTo(map, 18);
+        
+        // Add info window for user location
+        const infoWindow = new google.maps.InfoWindow({
+            content: '<div style="text-align: center; padding: 5px;"><strong>📍 Your Location</strong><br><small>Current position</small></div>'
+        });
+        
+        userLocationMarker.addListener('click', function() {
+            infoWindow.open(map, userLocationMarker);
+        });
+    }
+
+    /**
+     * Update user location on Street View
+     * @param {Object} userLocation - Object with lat and lng properties
+     * @param {Object} userIcon - Google Maps icon object
+     */
+    function updateUserLocationOnStreetView(userLocation, userIcon) {
+        // Remove existing user location marker from Street View
+        if (streetViewUserMarker) {
+            streetViewUserMarker.setMap(null);
+        }
+        
+        // Create new marker for user location in Street View
+        streetViewUserMarker = new google.maps.Marker({
+            position: userLocation,
+            map: panorama,
+            icon: userIcon,
+            title: 'Your Location',
+            zIndex: 1000
+        });
+        
+        // Center Street View on user location with default heading (North)
+        panorama.setPosition(userLocation);
+        panorama.setPov({ heading: 0, pitch: 0 });
+        
+        // Also update the satellite map marker (for when user switches to directions)
+        if (userLocationMarker) {
+            userLocationMarker.setMap(null);
+        }
+        
+        userLocationMarker = new google.maps.Marker({
+            position: userLocation,
+            map: map,
+            icon: userIcon,
+            title: 'Your Location',
+            zIndex: 1000
+        });
+        
+        // Center the satellite map as well
+        map.panTo(userLocation);
+    }
+
+    /**
+     * Smoothly zoom to a specific level
+     * @param {google.maps.Map} map - The map to zoom
+     * @param {number} targetZoom - Target zoom level
+     */
+    function smoothZoomTo(map, targetZoom) {
+        const currentZoom = map.getZoom();
+        
+        if (currentZoom !== targetZoom) {
+            const zoomStep = currentZoom < targetZoom ? 1 : -1;
+            const zoomInterval = setInterval(function() {
+                const newZoom = map.getZoom() + zoomStep;
+                map.setZoom(newZoom);
+                
+                if (newZoom === targetZoom) {
+                    clearInterval(zoomInterval);
+                }
+            }, 100);
+        }
+    }
+
+    // MY PLACES FEATURE FUNCTIONS
+    
+    /**
+     * Load saved places from localStorage
+     */
+    function loadMyPlaces() {
+        const savedPlaces = localStorage.getItem('myPlaces');
+        if (savedPlaces) {
+            try {
+                myPlaces = JSON.parse(savedPlaces);
+            } catch (error) {
+                console.error('Error loading saved places:', error);
+                myPlaces = [];
+            }
+        }
+    }
+
+    /**
+     * Save places to localStorage
+     */
+    function saveMyPlaces() {
+        try {
+            localStorage.setItem('myPlaces', JSON.stringify(myPlaces));
+        } catch (error) {
+            console.error('Error saving places:', error);
+            showToast('Error saving places', 'error');
+        }
+    }
+
+    /**
+     * Update the bookmark button state based on current building
+     */
+    function updateBookmarkButton() {
+        const bookmarkBtn = document.getElementById('bookmark-btn');
+        if (!bookmarkBtn || !currentSelectedBuilding) return;
+        
+        const isSaved = myPlaces.some(place => place.key === currentSelectedBuilding);
+        
+        if (isSaved) {
+            bookmarkBtn.textContent = '⭐ Remove from My Places';
+            bookmarkBtn.classList.add('saved');
+        } else {
+            bookmarkBtn.textContent = '⭐ Add to My Places';
+            bookmarkBtn.classList.remove('saved');
+        }
+    }
+
+    /**
+     * Toggle bookmark for current building
+     */
+    function toggleBookmark() {
+        if (!currentSelectedBuilding) return;
+        
+        const building = buildingInfo[currentSelectedBuilding];
+        const location = locations[currentSelectedBuilding];
+        
+        if (!building || !location) {
+            showToast('Building information not found', 'error');
+            return;
+        }
+        
+        const existingIndex = myPlaces.findIndex(place => place.key === currentSelectedBuilding);
+        
+        if (existingIndex !== -1) {
+            // Remove from saved places
+            myPlaces.splice(existingIndex, 1);
+            saveMyPlaces();
+            updateBookmarkButton();
+            updateMyPlacesCount();
+            showToast(`${building.name} removed from My Places`, 'success');
+        } else {
+            // Add to saved places
+            const placeData = {
+                key: currentSelectedBuilding,
+                name: building.name,
+                description: building.description,
+                image: building.image,
+                lat: location.lat,
+                lng: location.lng,
+                location: building.location,
+                hours: building.hours,
+                website: building.website,
+                phone: building.phone,
+                savedAt: new Date().toISOString()
+            };
+            
+            myPlaces.push(placeData);
+            saveMyPlaces();
+            updateBookmarkButton();
+            updateMyPlacesCount();
+            showToast(`${building.name} added to My Places`, 'success');
+        }
+    }
+
+    /**
+     * Update the count display in the My Places button
+     */
+    function updateMyPlacesCount() {
+        const countElement = document.getElementById('my-places-count');
+        if (countElement) {
+            countElement.textContent = myPlaces.length;
+        }
+    }
+
+    /**
+     * Show the My Places panel
+     */
+    function showMyPlaces() {
+        const panel = document.getElementById('my-places-panel');
+        const content = document.getElementById('my-places-content');
+        
+        // Close other panels first
+        closeBuildingInfo();
+        hideDirectionsPanel();
+        
+        if (myPlaces.length === 0) {
+            // Show empty state
+            content.innerHTML = `
+                <div class="my-places-empty">
+                    <h4>⭐ No Saved Places Yet</h4>
+                    <p>Click the "⭐ Add to My Places" button in any building's info panel to save your favorite locations.</p>
+                </div>
+            `;
+        } else {
+            // Show saved places
+            content.innerHTML = myPlaces.map(place => `
+                <div class="saved-place-item" onclick="goToSavedPlace('${place.key}')">
+                    <div class="saved-place-icon">🏢</div>
+                    <div class="saved-place-info">
+                        <div class="saved-place-name">${place.name}</div>
+                        <div class="saved-place-description">${place.location}</div>
+                    </div>
+                    <button class="saved-place-remove" onclick="removeSavedPlace('${place.key}', event)" title="Remove from My Places">
+                        ×
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        // Show the panel
+        panel.style.display = 'block';
+        setTimeout(() => {
+            panel.classList.add('show');
+        }, 10);
+    }
+
+    /**
+     * Close the My Places panel
+     */
+    function closeMyPlaces() {
+        const panel = document.getElementById('my-places-panel');
+        panel.classList.remove('show');
+        
+        setTimeout(() => {
+            panel.style.display = 'none';
+        }, 400);
+    }
+
+    /**
+     * Navigate to a saved place
+     * @param {string} placeKey - The key of the saved place
+     */
+    function goToSavedPlace(placeKey) {
+        // Close the My Places panel
+        closeMyPlaces();
+        
+        // Show the building info
+        showBuildingInfo(placeKey);
+        
+        // Navigate to the location
+        goToLocation(placeKey);
+        
+        showToast('Navigated to saved place', 'success');
+    }
+
+    /**
+     * Remove a place from saved places
+     * @param {string} placeKey - The key of the place to remove
+     * @param {Event} event - The click event
+     */
+    function removeSavedPlace(placeKey, event) {
+        event.stopPropagation(); // Prevent triggering the parent click
+        
+        const placeIndex = myPlaces.findIndex(place => place.key === placeKey);
+        if (placeIndex !== -1) {
+            const placeName = myPlaces[placeIndex].name;
+            myPlaces.splice(placeIndex, 1);
+            saveMyPlaces();
+            updateMyPlacesCount();
+            
+            // Refresh the My Places panel
+            showMyPlaces();
+            
+            // Update bookmark button if this building is currently selected
+            if (currentSelectedBuilding === placeKey) {
+                updateBookmarkButton();
+            }
+            
+            showToast(`${placeName} removed from My Places`, 'success');
+        }
+    }
+
+    /**
+     * Show a toast notification
+     * @param {string} message - The message to display
+     * @param {string} type - The type of notification ('success' or 'error')
+     */
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast-notification');
+        if (!toast) return;
+        
+        // Set message and type
+        toast.textContent = message;
+        toast.className = `toast-notification ${type}`;
+        
+        // Show the toast
+        toast.classList.add('show');
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
+    // VIRTUAL TOUR FEATURE FUNCTIONS
+    
+    /**
+     * Start the guided virtual tour
+     */
+    function startVirtualTour() {
+        console.log('startVirtualTour called');
+        
+        // Close any other open panels
+        closeBuildingInfo();
+        hideDirectionsPanel();
+        closeMyPlaces();
+        
+        // Set tour state
+        isVirtualTourActive = true;
+        currentTourStop = 0;
+        
+        // Update button appearance
+        const tourBtn = document.getElementById('virtual-tour-btn');
+        tourBtn.classList.add('active');
+        tourBtn.textContent = '🎬 Tour Active';
+        
+        // Show tour overlay and panel
+        document.getElementById('tour-overlay').classList.add('show');
+        document.getElementById('virtual-tour-panel').classList.add('show');
+        
+        // Navigate to first stop
+        goToTourStop(0);
+        
+        // Show success message
+        showToast('Virtual tour started! Use the controls to navigate.', 'success');
+        
+        console.log('Virtual tour started successfully');
+    }
+
+    /**
+     * Exit the virtual tour and return to normal mode
+     */
+    function exitVirtualTour() {
+        console.log('exitVirtualTour called');
+        
+        // Reset tour state
+        isVirtualTourActive = false;
+        currentTourStop = 0;
+        
+        // Update button appearance
+        const tourBtn = document.getElementById('virtual-tour-btn');
+        tourBtn.classList.remove('active');
+        tourBtn.textContent = '🎬 Start Virtual Tour';
+        
+        // Hide tour overlay and panel
+        document.getElementById('tour-overlay').classList.remove('show');
+        document.getElementById('virtual-tour-panel').classList.remove('show');
+        
+        // Return to default view (library)
+        goToLocation('library');
+        
+        // Show exit message
+        showToast('Virtual tour ended. Welcome back!', 'success');
+        
+        console.log('Virtual tour ended successfully');
+    }
+
+    /**
+     * Navigate to a specific tour stop
+     * @param {number} stopIndex - The index of the tour stop
+     */
+    function goToTourStop(stopIndex) {
+        if (stopIndex < 0 || stopIndex >= virtualTourStops.length) {
+            console.error('Invalid tour stop index:', stopIndex);
+            return;
+        }
+        
+        const stop = virtualTourStops[stopIndex];
+        const location = locations[stop.key];
+        
+        if (!location) {
+            console.error('Location not found for tour stop:', stop.key);
+            return;
+        }
+        
+        // Update current stop
+        currentTourStop = stopIndex;
+        
+        // Navigate to the location with the tour's specific heading
+        panorama.setPosition(location);
+        panorama.setPov({ heading: stop.heading, pitch: 0 });
+        
+        // Update tour panel content
+        updateTourPanel(stop, stopIndex);
+        
+        // Update button states
+        updateTourButtonStates(stopIndex);
+        
+        console.log(`Tour stop ${stopIndex + 1}: ${stop.name}`);
+    }
+
+    /**
+     * Update the tour panel with current stop information
+     * @param {Object} stop - The current tour stop data
+     * @param {number} stopIndex - The current stop index
+     */
+    function updateTourPanel(stop, stopIndex) {
+        // Update progress
+        document.getElementById('tour-current-stop').textContent = stopIndex + 1;
+        document.getElementById('tour-total-stops').textContent = virtualTourStops.length;
+        
+        // Update building information
+        document.getElementById('tour-building-name').textContent = stop.name;
+        document.getElementById('tour-building-description').textContent = stop.description;
+    }
+
+    /**
+     * Update tour navigation button states
+     * @param {number} stopIndex - The current stop index
+     */
+    function updateTourButtonStates(stopIndex) {
+        const prevBtn = document.getElementById('tour-prev-btn');
+        const nextBtn = document.getElementById('tour-next-btn');
+        
+        // Previous button - disabled on first stop
+        prevBtn.disabled = stopIndex === 0;
+        
+        // Next button - disabled on last stop
+        nextBtn.disabled = stopIndex === virtualTourStops.length - 1;
+    }
+
+    /**
+     * Navigate to the next tour stop
+     */
+    function nextTourStop() {
+        if (currentTourStop < virtualTourStops.length - 1) {
+            goToTourStop(currentTourStop + 1);
+        }
+    }
+
+    /**
+     * Navigate to the previous tour stop
+     */
+    function previousTourStop() {
+        if (currentTourStop > 0) {
+            goToTourStop(currentTourStop - 1);
+        }
+    }
+
+    /**
+     * Check if virtual tour is active (for other functions)
+     * @returns {boolean} True if virtual tour is active
+     */
+    function isTourActive() {
+        return isVirtualTourActive;
+    }
+
+
+
+ 
+</script>
+</body>
+</html>

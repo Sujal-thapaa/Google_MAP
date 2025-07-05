@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ULM Interactive Map</title>
+    <style>
+        /* Container for the map */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #4a7c59;
+            background-image: linear-gradient(135deg, #11ff58aa 0%, #37ff69b6 50%, #32ff70b2 100%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Search bar styling for open minimap */
+        #open-search-bar {
+            position: relative;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+        }
+
+        /* Hide search bar when in iframe (small minimap) */
+        .in-iframe #open-search-bar {
+            display: none;
+        }
+
+        #open-search-container {
+            position: relative;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        #open-building-search {
+            width: 100%;
+            padding: 12px 45px 12px 15px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-family: Arial, sans-serif;
+            outline: none;
+            box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.95);
+            transition: all 0.3s ease;
+        }
+
+        #open-building-search:focus {
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        #open-building-search::placeholder {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        /* Search icon for open minimap */
+        #open-search-container::after {
+            content: "🔍";
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            font-size: 18px;
+            opacity: 0.7;
+        }
+
+        /* Dropdown for open minimap */
+        #open-search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1001;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            margin-top: 5px;
+        }
+
+        .open-search-option {
+            padding: 12px 20px;
+            color: #333;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .open-search-option:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .open-search-option:last-child {
+            border-bottom: none;
+            border-radius: 0 0 15px 15px;
+        }
+
+        .open-search-option:first-child {
+            border-radius: 15px 15px 0 0;
+        }
+
+        #map-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #map-content {
+            position: relative;
+            transform-origin: 0 0; /* Required for Panzoom */
+        }
+
+        /* The map image */
+        #map-image {
+            display: block;
+            width: 100%;
+            height: auto; /* Maintain aspect ratio */
+        }
+
+        /* Style for pins */
+        .point {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background-color: #ff3333;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s, opacity 0.3s;
+            opacity: 0;
+        }
+
+        /* Show points when map container is hovered, focused, or active */
+        #map-container:hover .point,
+        #map-container:focus-within .point,
+        #map-container:active .point,
+        #map-container.show-points .point {
+            opacity: 1;
+        }
+
+        /* Add subtle fade-in animation for smoother appearance */
+        #map-container:hover .point {
+            animation: fadeInPoints 0.3s ease-in-out;
+        }
+
+        @keyframes fadeInPoints {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Glowing effect for selected building */
+        .point.glow {
+            opacity: 1 !important;
+            background-color: #00ff00 !important;
+            box-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00, 0 0 60px #00ff00;
+            transform: scale(1.5);
+            z-index: 1000;
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% { 
+                box-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00, 0 0 60px #00ff00;
+                transform: scale(1.5);
+            }
+            50% { 
+                box-shadow: 0 0 30px #00ff00, 0 0 60px #00ff00, 0 0 90px #00ff00;
+                transform: scale(1.7);
+            }
+            100% { 
+                box-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00, 0 0 60px #00ff00;
+                transform: scale(1.5);
+            }
+        }
+
+        .point:hover {
+            transform: scale(1.2);
+            background-color: #ff6666;
+        }
+
+        /* Tooltip styling */
+        .point::after {
+            content: attr(title);
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 5px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            font-size: 12px;
+        }
+
+        .point:hover::after {
+            opacity: 1;
+        }
+
+
+    </style>
+  </head>
+  <body>
+  
+  <!-- Search bar for open minimap -->
+  <div id="open-search-bar">
+      <div id="open-search-container">
+          <input type="text" id="open-building-search" placeholder="Search for buildings on campus..." 
+                 onfocus="showOpenSearchDropdown()" 
+                 onblur="hideOpenSearchDropdown()" 
+                 oninput="filterOpenBuildings(this.value)">
+          <div id="open-search-dropdown"></div>
+      </div>
+  </div>
+  
+  <div id="map-container" tabindex="0" onclick="togglePoints()">
+    <div id="map-content">
+        <img src="https://github.com/Sujal-thapaa/ULM_virtual_tour_v2/raw/gh-pages/ULM_map.png" id="map-image" alt="ULM Campus Map">
+
+
+        <!-- Pins -->
+        <div class="point" style="top: 4%; left: 30%;" title="Madison Hall" data-name="madison hall" data-location="madisonHall" onclick="event.stopPropagation(); redirectToStreetView('madisonHall')"></div>
+        <div class="point" style="top: 17%; left: 28%;" title="BCM" data-name="bcm" data-location="bcm" onclick="event.stopPropagation(); redirectToStreetView('bcm')"></div>
+        <div class="point" style="top: 50%; left: 50%;" title="Library" data-name="library" data-location="library" onclick="event.stopPropagation(); redirectToStreetView('library')"></div>
+        <div class="point" style="top: 42%; left: 17%;" title="Chemistry & Natural Science Building" data-name="chemistry & natural science building" data-location="cnsb" onclick="event.stopPropagation(); redirectToStreetView('cnsb')"></div>
+        <div class="point" style="top: 46%; left: 28%;" title="HUB" data-name="hub" data-location="hub" onclick="event.stopPropagation(); redirectToStreetView('hub')"></div>
+        <div class="point" style="top: 35%; left: 69%;" title="Schulze Dining Hall" data-name="schulze dining hall" data-location="schulzeDiningHall" onclick="event.stopPropagation(); redirectToStreetView('schulzeDiningHall')"></div>
+        <div class="point" style="top: 47%; left: 33%;" title="Sandel Hall" data-name="sandel hall" data-location="sandelHall" onclick="event.stopPropagation(); redirectToStreetView('sandelHall')"></div>
+        <div class="point" style="top: 52%; left: 40%;" title="Student Success Center" data-name="student success center" data-location="studentSuccessCenter" onclick="event.stopPropagation(); redirectToStreetView('studentSuccessCenter')"></div>
+        <div class="point" style="top: 22%; left: 85%;" title="Coliseum" data-name="coliseum" data-location="coliseum" onclick="event.stopPropagation(); redirectToStreetView('coliseum')"></div>
+        <div class="point" style="top: 37%; left: 7%;" title="Hemphill Hall (HMPH)" data-name="hemphill hall" data-location="HemphillHall" onclick="event.stopPropagation(); redirectToStreetView('HemphillHall')"></div>
+        <div class="point" style="top: 64%; left: 27%;" title="Walker Hall (WALK)" data-name="walker hall" data-location="GeorgeTWalkerHall" onclick="event.stopPropagation(); redirectToStreetView('GeorgeTWalkerHall')"></div>
+        <div class="point" style="top: 57%; left: 24%;" title="Hanna Hall (HANN)" data-name="hanna hall" data-location="HannaHall" onclick="event.stopPropagation(); redirectToStreetView('HannaHall')"></div>
+        <div class="point" style="top: 72%; left: 19%;" title="Sugar Hall (SUGR)" data-name="sugar hall" data-location="SugarHall" onclick="event.stopPropagation(); redirectToStreetView('SugarHall')"></div>
+        <div class="point" style="top: 60%; left: 13%;" title="Kitty DeGree Hall (NURS)" data-name="kitty degree hall" data-location="KittyDeGreeHall" onclick="event.stopPropagation(); redirectToStreetView('KittyDeGreeHall')"></div>
+        <div class="point" style="top: 38%; left: 29%;" title="University Commons" data-name="university commons" data-location="UniversityCommons" onclick="event.stopPropagation(); redirectToStreetView('UniversityCommons')"></div>
+        <div class="point" style="top: 41%; left: 39%;" title="University Suites" data-name="university suites" data-location="UniversitySuites" onclick="event.stopPropagation(); redirectToStreetView('UniversitySuites')"></div>
+        <div class="point" style="top: 20%; left: 42%;" title="Coenen Hall (COEN)" data-name="coenen hall" data-location="CoenenHall" onclick="event.stopPropagation(); redirectToStreetView('CoenenHall')"></div>
+        <div class="point" style="top: 72%; left: 57%;" title="Strauss Hall (STRS)" data-name="strauss hall" data-location="StraussHall" onclick="event.stopPropagation(); redirectToStreetView('StraussHall')"></div>
+        <div class="point" style="top: 12%; left: 51%;" title="Foot Bridge" data-name="strauss hall" data-location="footbridge" onclick="event.stopPropagation(); redirectToStreetView('footbridge')"></div>
+    </div>
+</div>
+
+  <script>
+      // Check if page is loaded in iframe and hide search bar for small minimap
+      window.addEventListener('DOMContentLoaded', function() {
+          if (window.self !== window.top) {
+              // Page is in an iframe (small minimap)
+              document.body.classList.add('in-iframe');
+          }
+      });
+
+      // Toggle points visibility when map is clicked
+      function togglePoints() {
+          const mapContainer = document.getElementById('map-container');
+          mapContainer.classList.toggle('show-points');
+      }
+
+    // Redirect to the respective Street View location in index.html
+    function redirectToStreetView(locationKey) {
+        sessionStorage.setItem("selectedLocation", locationKey);
+        window.location.href = "index.html";
+    }
+
+    // Listen for messages from parent window to glow buildings
+    window.addEventListener('message', function(event) {
+        if (event.data.type === 'glowBuilding') {
+            glowBuilding(event.data.locationKey);
+        }
+    });
+
+    // Function to make a building glow
+    function glowBuilding(locationKey) {
+        // First, remove glow from all points
+        const allPoints = document.querySelectorAll('.point');
+        allPoints.forEach(point => {
+            point.classList.remove('glow');
+        });
+
+        // Then add glow to the selected building
+        const selectedPoint = document.querySelector(`[data-location="${locationKey}"]`);
+        if (selectedPoint) {
+            selectedPoint.classList.add('glow');
+            // Show all points so the glow is visible
+            document.getElementById('map-container').classList.add('show-points');
+            
+            // Remove glow after 5 seconds
+            setTimeout(() => {
+                selectedPoint.classList.remove('glow');
+            }, 5000);
+        }
+    }
+
+    // Building search functionality for open minimap
+    const openBuildingList = [
+        { key: 'library', name: 'University Library' },
+        { key: 'madisonHall', name: 'Madison Hall' },
+        { key: 'sandelHall', name: 'Sandel Hall' },
+        { key: 'GeorgeTWalkerHall', name: 'George T. Walker Hall' },
+        { key: 'footbridge', name: 'Footbridge' },
+        { key: 'hub', name: 'The Hub' },
+        { key: 'schulzeDiningHall', name: 'Schulze Dining Hall' },
+        { key: 'coliseum', name: 'Fant-Ewing Coliseum' },
+        { key: 'studentSuccessCenter', name: 'Student Success Center' },
+        { key: 'UniversityCommons', name: 'University Commons' },
+        { key: 'UniversitySuites', name: 'University Suites' },
+        { key: 'cnsb', name: 'Chemistry & Natural Science Building' },
+        { key: 'bcm', name: 'BCM Building' },
+        { key: 'KittyDeGreeHall', name: 'Kitty DeGree Hall' },
+        { key: 'SugarHall', name: 'Sugar Hall' },
+        { key: 'HemphillHall', name: 'Hemphill Hall' },
+        { key: 'CoenenHall', name: 'Coenen Hall' },
+        { key: 'StraussHall', name: 'Strauss Hall' },
+        { key: 'HannaHall', name: 'Hanna Hall' }
+    ];
+
+    function showOpenSearchDropdown() {
+        const dropdown = document.getElementById('open-search-dropdown');
+        populateOpenDropdown(openBuildingList);
+        dropdown.style.display = 'block';
+        
+        // Show all points when search is focused (since this is full map view)
+        document.getElementById('map-container').classList.add('show-points');
+    }
+
+    function hideOpenSearchDropdown() {
+        // Add a small delay to allow for option clicks
+        setTimeout(() => {
+            const dropdown = document.getElementById('open-search-dropdown');
+            dropdown.style.display = 'none';
+        }, 150);
+    }
+
+    function filterOpenBuildings(searchText) {
+        const filtered = openBuildingList.filter(building =>
+            building.name.toLowerCase().includes(searchText.toLowerCase())
+        );
+        populateOpenDropdown(filtered);
+    }
+
+    function populateOpenDropdown(buildings) {
+        const dropdown = document.getElementById('open-search-dropdown');
+        dropdown.innerHTML = '';
+        
+        buildings.forEach(building => {
+            const option = document.createElement('div');
+            option.className = 'open-search-option';
+            option.textContent = building.name;
+            option.onclick = () => selectOpenBuilding(building.key, building.name);
+            dropdown.appendChild(option);
+        });
+    }
+
+    function selectOpenBuilding(locationKey, buildingName) {
+        // Show all points first since this is the full map view
+        document.getElementById('map-container').classList.add('show-points');
+        
+        // Glow the selected building
+        glowBuilding(locationKey);
+        
+        // Update search input
+        document.getElementById('open-building-search').value = buildingName;
+        document.getElementById('open-search-dropdown').style.display = 'none';
+        
+        // Clear the search after a short delay
+        setTimeout(() => {
+            document.getElementById('open-building-search').value = '';
+        }, 3000);
+    }
+</script>
+
+</body>
+</html>
